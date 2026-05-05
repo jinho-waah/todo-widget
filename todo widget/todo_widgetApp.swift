@@ -26,6 +26,9 @@ private var anchorEnabledKey: UInt8 = 0
 private var anchorTopYKey: UInt8 = 0
 
 final class TopAnchoredWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
     var anchorEnabled: Bool {
         get { (objc_getAssociatedObject(self, &anchorEnabledKey) as? Bool) ?? false }
         set { objc_setAssociatedObject(self, &anchorEnabledKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
@@ -76,6 +79,18 @@ final class TopAnchoredWindow: NSWindow {
         super.setFrameTopLeftPoint(point)
     }
 
+    override func mouseDown(with event: NSEvent) {
+        makeKeyAndOrderFront(nil)
+        super.mouseDown(with: event)
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown {
+            makeKeyAndOrderFront(nil)
+        }
+        super.sendEvent(event)
+    }
+
     private func adjusted(_ rect: NSRect) -> NSRect {
         guard anchorEnabled else { return rect }
         // 사이즈 변경이 없는 순수 이동인 경우 anchor 갱신만 하고 그대로 통과
@@ -89,13 +104,14 @@ final class TopAnchoredWindow: NSWindow {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var toggleHotKey: HotKey?
     private var heightObserver: NSObjectProtocol?
     private var editModeObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DispatchQueue.main.async { self.configureWindow() }
+        installMainMenu()
         registerGlobalHotKey()
         registerContentHeightObserver()
         registerEditModeObserver()
@@ -104,6 +120,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     deinit {
         if let obs = heightObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = editModeObserver { NotificationCenter.default.removeObserver(obs) }
+    }
+
+    // MARK: Window Lifecycle
+
+    // LSUIElement 앱 패턴: 창 닫기는 종료가 아니라 숨김.
+    // 사용자는 ⌥+` 단축키로 다시 호출, ⌘Q 로 진짜 종료.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        return false
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    // MARK: Main Menu (LSUIElement 라 menu bar 는 안 보이지만 키 단축키는 동작)
+
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu — Quit
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(NSMenuItem(
+            title: "todo widget 종료",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        ))
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        // Edit menu — TextField 안에서 cmd+c/v/x/a/z 가 먹게.
+        let editMenuItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redo)
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: Edit-mode (drag disable)
@@ -141,7 +204,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyContentHeight(_ contentHeight: CGFloat) {
         guard contentHeight > 0,
               let window = NSApp.windows.first as? TopAnchoredWindow else { return }
-        let contentRect = NSRect(origin: .zero, size: NSSize(width: DesignTokens.widgetWidth, height: contentHeight))
+        // ScrollView 가 내부에서 cap 을 걸지만, 윈도우 frame 도 한 번 더 cap 해
+        // 측정 race 등으로 잠깐이라도 max 를 넘지 않게 한다.
+        let cappedHeight = min(contentHeight, DesignTokens.widgetMaxHeight)
+        let contentRect = NSRect(origin: .zero, size: NSSize(width: DesignTokens.widgetWidth, height: cappedHeight))
         let frameSize = window.frameRect(forContentRect: contentRect).size
         var newFrame = window.frame
         newFrame.size = frameSize
@@ -156,14 +222,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
-    }
-
-    // MARK: Global Hotkey (⌥ + `)
+    // MARK: Global Hotkey (⌃ + 1)
 
     private func registerGlobalHotKey() {
-        let hotKey = HotKey(key: .grave, modifiers: [.option])
+        let hotKey = HotKey(key: .one, modifiers: [.control])
         hotKey.keyDownHandler = { [weak self] in
             self?.toggleWindow()
         }
@@ -172,13 +234,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func toggleWindow() {
         guard let window = NSApp.windows.first else { return }
-        if NSApp.isActive && window.isVisible && window.isKeyWindow {
-            NSApp.hide(nil)
+        let visibleAndFocused = window.isVisible && window.isKeyWindow && NSApp.isActive
+        if visibleAndFocused {
+            // 창 숨김 (앱 종료 X — LSUIElement 라 백그라운드에 살아 있음).
+            window.orderOut(nil)
         } else {
+            // 일반 window level 을 유지한 채 현재 Space 의 앞쪽으로만 가져온다.
+            window.level = .normal
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }
+    }
+
+    // 앱이 다시 활성화될 때마다 미리 알림 sync 를 한 번 더 돌린다. 앱 시작 시 권한이
+    // 거부됐다가 사용자가 System Settings 에서 켜준 경우에도 다음 활성화 시 자동 복구.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in await RemindersSync.shared.refresh() }
     }
 
     private func configureWindow() {
@@ -187,9 +259,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = true
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.level = .floating
+        window.level = .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.center()
+        // X 버튼 → windowShouldClose 로 라우팅 (창 숨김, 앱 유지).
+        window.delegate = self
+        // 닫혀도 NSWindow 인스턴스 retain → 단축키로 다시 호출 시 같은 창 사용.
+        window.isReleasedWhenClosed = false
 
         window.hasShadow = true
 

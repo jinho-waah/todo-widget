@@ -7,16 +7,15 @@ import UniformTypeIdentifiers
 // 두 모델의 차이 (SubTodo 는 같은 부모 children 끼리만 재정렬 허용) 는
 // `canReorder` 클로저로 흡수한다.
 //
-// Item 은 SwiftData @Model 이므로 class 다 → AnyObject. id 는 UUID.
+// `Reorderable` 프로토콜을 통해 `order` 필드에 직접 쓸 수 있으므로 별도의
+// setter 주입은 필요 없다.
 
-struct ReorderDropDelegate<Item: AnyObject & Identifiable>: DropDelegate where Item.ID == UUID {
+struct ReorderDropDelegate<Item: Reorderable>: DropDelegate {
     let target: Item
     let siblings: [Item]
     let isEditMode: Bool
     /// dragging item 이 이 target 과 reorder 가능한지 (e.g. 같은 parent 인지) 검사.
     let canReorder: (Item) -> Bool
-    /// 재정렬 결과를 모델에 반영. 보통 `{ $0.order = $1 }`.
-    let setOrder: (Item, Int) -> Void
     @Binding var dragging: Item?
     @Binding var dropTargetID: UUID?
 
@@ -78,7 +77,7 @@ struct ReorderDropDelegate<Item: AnyObject & Identifiable>: DropDelegate where I
             toOffset: to > from ? to + 1 : to
         )
         withAnimation(DesignTokens.layoutSpring) {
-            for (i, item) in arr.enumerated() { setOrder(item, i) }
+            for (i, item) in arr.enumerated() { item.order = i }
         }
     }
 }

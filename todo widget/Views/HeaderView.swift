@@ -4,11 +4,7 @@ struct HeaderView: View {
     @Binding var isEditMode: Bool
     let onAdd: () -> Void
 
-    @AppStorage("widgetTitle") private var widgetTitle: String = "Today"
-    @State private var isEditingTitle = false
-    @State private var draftTitle = ""
-    @State private var isTitleEditButtonHovered = false
-    @State private var hoveredHeaderButton: String? = nil
+    @State private var store = HeaderStore()
     @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
@@ -27,7 +23,7 @@ struct HeaderView: View {
                     isActive: isEditMode,
                     iconSize: 11
                 ) {
-                    withAnimation(DesignTokens.toggleSpring) { isEditMode.toggle() }
+                    isEditMode.toggle()
                 }
             }
         }
@@ -38,8 +34,8 @@ struct HeaderView: View {
 
     @ViewBuilder
     private var titleSection: some View {
-        if isEditingTitle {
-            TextField("", text: $draftTitle)
+        if store.state.isEditingTitle {
+            TextField("", text: draftTitleBinding)
                 .textFieldStyle(.plain)
                 .font(DesignTokens.titleFont)
                 .foregroundStyle(DesignTokens.titleColor)
@@ -47,32 +43,32 @@ struct HeaderView: View {
                 .focused($titleFieldFocused)
                 .focusEffectDisabled()
                 .frame(maxWidth: 180)
-                .onSubmit { commitTitle() }
+                .onSubmit { store.send(.commitTitle) }
                 .onChange(of: titleFieldFocused) { _, focused in
-                    if !focused { commitTitle() }
+                    if !focused { store.send(.commitTitle) }
                 }
+                // TextField 가 처음 렌더된 시점에 포커스 → 별도의 asyncAfter 불필요.
+                .onAppear { titleFieldFocused = true }
         } else {
             HStack(spacing: 6) {
-                Text(widgetTitle.isEmpty ? "Today" : widgetTitle)
+                Text(store.state.widgetTitle.isEmpty ? "Today" : store.state.widgetTitle)
                     .font(DesignTokens.titleFont)
                     .foregroundStyle(DesignTokens.titleColor)
                     .tracking(-0.3)
-                    .onTapGesture(count: 2) { beginEditingTitle() }
+                    .onTapGesture(count: 2) { store.send(.beginEditingTitle) }
 
-                Button(action: beginEditingTitle) {
+                Button(action: { store.send(.beginEditingTitle) }) {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(DesignTokens.textMeta)
                         .symbolRenderingMode(.hierarchical)
                         .frame(width: 20, height: 20)
                         .contentShape(Rectangle())
-                        .opacity(isTitleEditButtonHovered ? 1.0 : 0.75)
+                        .opacity(store.state.isTitleEditButtonHovered ? 1.0 : 0.75)
                 }
                 .buttonStyle(.plain)
                 .onHover { hovering in
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        isTitleEditButtonHovered = hovering
-                    }
+                    store.send(.titleEditButtonHovered(hovering))
                 }
                 .help("제목 편집")
                 .disabled(isEditMode)
@@ -82,18 +78,11 @@ struct HeaderView: View {
         }
     }
 
-    private func beginEditingTitle() {
-        draftTitle = widgetTitle
-        isEditingTitle = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            titleFieldFocused = true
-        }
-    }
-
-    private func commitTitle() {
-        let trimmed = draftTitle.trimmingCharacters(in: .whitespaces)
-        widgetTitle = trimmed.isEmpty ? "Today" : trimmed
-        isEditingTitle = false
+    private var draftTitleBinding: Binding<String> {
+        Binding(
+            get: { store.state.draftTitle },
+            set: { store.send(.updateDraftTitle($0)) }
+        )
     }
 
     // MARK: Buttons
@@ -104,7 +93,7 @@ struct HeaderView: View {
         iconSize: CGFloat = 12,
         action: @escaping () -> Void
     ) -> some View {
-        let isHovered = hoveredHeaderButton == icon
+        let isHovered = store.state.hoveredHeaderButton == icon
 
         return Button(action: action) {
             ZStack {
@@ -140,7 +129,7 @@ struct HeaderView: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            hoveredHeaderButton = hovering ? icon : nil
+            store.send(.headerButtonHovered(icon: icon, hovering: hovering))
         }
     }
 }

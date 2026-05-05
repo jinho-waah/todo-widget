@@ -6,6 +6,7 @@ import SwiftUI
 struct CountdownBadge: View {
     let seconds: Int
     let total: Int
+    let tint: Color
     let onCancel: () -> Void
 
     private var progress: Double {
@@ -21,14 +22,14 @@ struct CountdownBadge: View {
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        DesignTokens.systemBlue.opacity(0.80),
+                        tint.opacity(0.80),
                         style: StrokeStyle(lineWidth: 2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)
                 Text("\(seconds)")
                     .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundStyle(DesignTokens.systemBlue)
+                    .foregroundStyle(tint)
                     .contentTransition(.numericText(countsDown: true))
                     .animation(.easeInOut(duration: 0.3), value: seconds)
             }

@@ -1,23 +1,17 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import AppKit
 
 struct TodoRowView: View {
     @Bindable var todo: Todo
     let isEditMode: Bool
     @Environment(\.modelContext) private var modelContext
 
-    @AppStorage("completionDeleteDelay") private var completionDeleteDelay: Int = 5
     @AppStorage("appLocale") private var appLocale: String = "ko"
+    @AppStorage("completionDeleteDelay") private var completionDeleteDelay: Int = 5
 
-    @State private var showEditForm = false
-    @State private var showActions = false
-    @State private var showSubTodoPopover = false
-    @State private var newSubTodoTitle = ""
-    @State private var countdownSeconds: Int? = nil
-    @State private var countdownTask: Task<Void, Never>? = nil
-    @State private var draggingSubTodo: SubTodo? = nil
-    @State private var subDropTargetID: UUID? = nil
+    @State private var store = TodoRowStore()
 
     @FocusState private var subTodoFocused: Bool
 
@@ -25,63 +19,71 @@ struct TodoRowView: View {
         todo.subTodos.sorted { $0.order < $1.order }
     }
 
+    private var isKo: Bool { appLocale.hasPrefix("ko") }
+    private var reminderAccentColor: Color {
+        RemindersSync.shared.color(forListID: todo.reminderListID) ?? DesignTokens.systemBlue
+    }
+
+    private var reminderAccentHeight: CGFloat {
+        if let desc = todo.todoDescription, !desc.isEmpty { return 48 }
+        return 34
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 10) {
                 CheckboxView(isCompleted: todo.isCompleted, size: DesignTokens.checkbox) {
-                    withAnimation(DesignTokens.toggleSpring) { todo.isCompleted.toggle() }
-                    Task { await RemindersSync.shared.push(todo) }
+                    toggleCompletion()
                 }
                 .padding(.top, 1)
                 .disabled(isEditMode)
                 .opacity(isEditMode ? DesignTokens.disabledOpacity : 1.0)
 
-                displayContent
+                HStack(alignment: .top, spacing: 8) {
+                    reminderAccentBar
+                    displayContent
+                }
 
                 Spacer(minLength: 0)
 
-                if let seconds = countdownSeconds {
-                    CountdownBadge(seconds: seconds, total: completionDeleteDelay) {
-                        withAnimation(DesignTokens.toggleSpring) { todo.isCompleted = false }
-                    }
-                    .transition(.scale(scale: 0.7).combined(with: .opacity))
-                } else {
-                    HStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    if let countdownRemaining = store.state.countdownRemaining {
+                        CountdownBadge(
+                            seconds: countdownRemaining,
+                            total: max(completionDeleteDelay, 1),
+                            tint: reminderAccentColor,
+                            onCancel: { store.send(.cancelCompletionCountdown(todo: todo)) }
+                        )
+                        .padding(.trailing, 2)
+                        .transition(.opacity.combined(with: .scale(scale: 0.88)))
+                    } else {
                         if todo.subTodos.count < 20 {
                             addSubTodoButton
                         }
                         moreButton
                     }
-                    .disabled(isEditMode)
-                    .opacity(isEditMode ? DesignTokens.disabledOpacity : 1.0)
-                    .transition(.opacity)
                 }
+                .disabled(isEditMode)
+                .opacity(isEditMode ? DesignTokens.disabledOpacity : 1.0)
+                .transition(.opacity)
             }
             .animation(DesignTokens.toggleSpring, value: isEditMode)
 
             if !todo.subTodos.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(sortedSubTodos) { subTodo in
-                        let isDragging = draggingSubTodo?.id == subTodo.id
-                        let isDropTarget = isEditMode
-                            && subDropTargetID == subTodo.id
-                            && draggingSubTodo?.id != subTodo.id
                         SubTodoRowView(subTodo: subTodo, isEditMode: isEditMode)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(isDropTarget ? DesignTokens.systemBlue.opacity(0.10) : Color.clear)
-                                    .padding(.horizontal, -2)
-                            )
-                            .contentShape(Rectangle())
-                            .opacity(isEditMode && isDragging ? 0.35 : 1.0)
-                            .scaleEffect(isEditMode && isDragging ? 0.98 : 1.0, anchor: .center)
-                            .animation(DesignTokens.toggleSpring, value: isDragging)
-                            .animation(DesignTokens.toggleSpring, value: isDropTarget)
-                            .onDrag {
-                                guard isEditMode else { return NSItemProvider() }
-                                draggingSubTodo = subTodo
-                                return NSItemProvider(object: subTodo.id.uuidString as NSString)
-                            } preview: {
+                            .reorderableRow(
+                                item: subTodo,
+                                siblings: sortedSubTodos,
+                                isEditMode: isEditMode,
+                                highlightCornerRadius: 8,
+                                highlightInset: -2,
+                                // 같은 부모 todo 의 children 끼리만 reorder 허용.
+                                canReorder: { $0.parent?.id == subTodo.parent?.id },
+                                dragging: draggingSubTodoBinding,
+                                dropTargetID: subDropTargetIDBinding
+                            ) {
                                 Text(subTodo.title)
                                     .font(DesignTokens.subTodoFont)
                                     .foregroundStyle(DesignTokens.textSubTodo)
@@ -89,63 +91,97 @@ struct TodoRowView: View {
                                     .padding(.vertical, 6)
                                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                             }
-                            .onDrop(
-                                of: [.text],
-                                delegate: ReorderDropDelegate<SubTodo>(
-                                    target: subTodo,
-                                    siblings: sortedSubTodos,
-                                    isEditMode: isEditMode,
-                                    // 같은 부모 todo 의 children 끼리만 reorder 허용.
-                                    canReorder: { dragging in
-                                        dragging.parent?.id == subTodo.parent?.id
-                                    },
-                                    setOrder: { $0.order = $1 },
-                                    dragging: $draggingSubTodo,
-                                    dropTargetID: $subDropTargetID
-                                )
-                            )
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)),
-                                removal: .opacity
-                            ))
+                            // 추가/삭제 대칭 — 양쪽 모두 opacity + scale.
+                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
                     }
                 }
                 .padding(.top, 8)
                 .transition(.opacity)
                 .onDrop(of: [.text], delegate: ReorderDropResetDelegate<SubTodo>(
-                    dragging: $draggingSubTodo,
-                    dropTargetID: $subDropTargetID
+                    dragging: draggingSubTodoBinding,
+                    dropTargetID: subDropTargetIDBinding
                 ))
             }
         }
         .padding(EdgeInsets(top: 12, leading: 6, bottom: 10, trailing: 6))
-        .animation(DesignTokens.toggleSpring, value: countdownSeconds == nil)
         // 빈 제목으로 생성된 새 todo 는 row layoutSpring 등장이 settle 된 뒤 편집 폼을 연다.
         // 0 이면 row 가 그려지기 전에 popover 가 떠 anchor 가 점프하므로
         // DesignTokens.rowAppearSettleDelay 만큼 sleep 한다.
         .task {
-            guard todo.title.isEmpty else { return }
-            try? await Task.sleep(for: DesignTokens.rowAppearSettleDelay)
-            if todo.title.isEmpty { showEditForm = true }
+            store.send(.autoOpenEditFormIfNeeded(todo))
         }
-        // 폼이 닫히면: 제목 비었으면 삭제, 아니면 (date/time 등 모든 변경 포함) push
-        .onChange(of: showEditForm) { _, showing in
-            guard !showing else { return }
-            if todo.title.trimmingCharacters(in: .whitespaces).isEmpty {
-                let rid = todo.reminderID
-                withAnimation(DesignTokens.layoutSpring) { modelContext.delete(todo) }
-                Task { await RemindersSync.shared.delete(reminderID: rid) }
-            } else {
-                Task { await RemindersSync.shared.push(todo) }
+        .onDisappear {
+            store.send(.rowDisappeared)
+        }
+        // 편집 폼이 닫히면: 제목 비었으면 삭제, 아니면 (date/time 등 모든 변경 포함) push
+        .onChange(of: store.state.moreMenu) { previous, current in
+            store.send(.moreMenuChanged(
+                previous: previous,
+                current: current,
+                todo: todo,
+                context: modelContext
+            ))
+        }
+    }
+
+    // MARK: Bindings
+
+    private var draggingSubTodoBinding: Binding<SubTodo?> {
+        Binding(
+            get: { store.state.draggingSubTodo },
+            set: { store.state.draggingSubTodo = $0 }
+        )
+    }
+
+    private var subDropTargetIDBinding: Binding<UUID?> {
+        Binding(
+            get: { store.state.subDropTargetID },
+            set: { store.state.subDropTargetID = $0 }
+        )
+    }
+
+    private var showSubTodoPopoverBinding: Binding<Bool> {
+        Binding(
+            get: { store.state.showSubTodoPopover },
+            set: { store.send(.showSubTodoPopover($0)) }
+        )
+    }
+
+    private var newSubTodoTitleBinding: Binding<String> {
+        Binding(
+            get: { store.state.newSubTodoTitle },
+            set: { store.send(.updateNewSubTodoTitle($0)) }
+        )
+    }
+
+    private var moreMenuPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { store.state.moreMenu != .closed },
+            set: { newValue in
+                if !newValue { store.send(.closeMoreMenu) }
             }
-        }
-        .onChange(of: todo.isCompleted) { _, completed in
-            if completed { startCountdown() } else { cancelCountdown() }
-        }
-        .onDisappear { countdownTask?.cancel() }
+        )
+    }
+
+    // MARK: Completion Countdown
+
+    private func toggleCompletion() {
+        store.send(.toggleCompletion(
+            todo: todo,
+            context: modelContext,
+            deleteDelay: completionDeleteDelay
+        ))
     }
 
     // MARK: Display
+
+    private var reminderAccentBar: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(reminderAccentColor.opacity(todo.isCompleted ? 0.45 : 0.95))
+            .frame(width: 3, height: reminderAccentHeight)
+            .padding(.top, 1)
+            .animation(DesignTokens.toggleSpring, value: todo.isCompleted)
+    }
 
     private var displayContent: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -204,9 +240,7 @@ struct TodoRowView: View {
     }
 
     private func formattedDueDate(_ date: Date, overdue: Bool) -> String {
-        let locale = Locale(identifier: appLocale)
         let cal = Calendar.current
-        let isKo = appLocale.hasPrefix("ko")
 
         var text: String
         if cal.isDateInToday(date) {
@@ -216,40 +250,31 @@ struct TodoRowView: View {
         } else if cal.isDateInYesterday(date) {
             text = isKo ? "어제" : "Yesterday"
         } else {
-            text = fullDateString(date, locale: locale)
+            text = formattedDate(date)
         }
 
-        if let time = timeString(date, locale: locale) { text += ", \(time)" }
+        if let time = timeString(date) { text += ", \(time)" }
         if overdue { text += isKo ? " 지남" : " overdue" }
         return text
     }
 
     private func formattedDate(_ date: Date) -> String {
-        fullDateString(date, locale: Locale(identifier: appLocale))
+        let sameYear = Calendar.current.component(.year, from: date)
+            == Calendar.current.component(.year, from: Date())
+        return DateFormatters.formatter(isKo: isKo, sameYear: sameYear).string(from: date)
     }
 
-    private func fullDateString(_ date: Date, locale: Locale) -> String {
-        let df = DateFormatter()
-        df.locale = locale
-        let sameYear = Calendar.current.component(.year, from: date) == Calendar.current.component(.year, from: Date())
-        let isKo = locale.identifier.hasPrefix("ko")
-        df.dateFormat = sameYear
-            ? (isKo ? "M월 d일 (E)" : "MMM d (EEE)")
-            : (isKo ? "yyyy년 M월 d일" : "MMM d, yyyy")
-        return df.string(from: date)
-    }
-
-    private func timeString(_ date: Date, locale: Locale) -> String? {
+    private func timeString(_ date: Date) -> String? {
         let cal = Calendar.current
         guard cal.component(.hour, from: date) != 0 || cal.component(.minute, from: date) != 0 else { return nil }
-        return date.formatted(.dateTime.hour().minute().locale(locale))
+        return date.formatted(.dateTime.hour().minute().locale(Locale(identifier: appLocale)))
     }
 
     // MARK: Buttons
 
     private var addSubTodoButton: some View {
         Button {
-            showSubTodoPopover = true
+            store.send(.showSubTodoPopover(true))
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 13, weight: .medium))
@@ -258,14 +283,15 @@ struct TodoRowView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showSubTodoPopover, arrowEdge: .trailing) {
+        .popover(isPresented: showSubTodoPopoverBinding, arrowEdge: .trailing) {
             subTodoPopover
         }
     }
 
     private var moreButton: some View {
         Button {
-            showActions = true
+            // popover 열 시점에 list snapshot 을 캐싱 → 매 render 마다 EventStore 호출 회피.
+            store.send(.openActions)
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 13, weight: .medium))
@@ -274,78 +300,59 @@ struct TodoRowView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showActions, arrowEdge: .trailing) {
-            actionsPopover
-        }
-        .popover(isPresented: $showEditForm, arrowEdge: .trailing) {
-            EditTodoFormView(todo: todo)
+        .popover(
+            // 단일 popover — 액션 / 편집 폼 컨텐츠를 swap.
+            // 두 개의 .popover 를 같은 anchor 에 붙이면 macOS 에서 둘 중 하나만 동작하는 케이스가 있어 통합.
+            isPresented: moreMenuPresentedBinding,
+            arrowEdge: .trailing
+        ) {
+            moreMenuContent
         }
     }
 
-    private var actionsPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                showActions = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    showEditForm = true
+    @ViewBuilder
+    private var moreMenuContent: some View {
+        switch store.state.moreMenu {
+        case .actions:
+            TodoActionsPopover(
+                lists: store.state.availableLists,
+                currentListID: todo.reminderListID ?? RemindersSync.shared.defaultListID,
+                onEdit: { store.send(.showEditForm) },
+                onSelectList: { listID in
+                    store.send(.selectList(todo: todo, listID: listID))
+                },
+                onCreateList: {
+                    store.send(.showCreateList)
+                },
+                onDelete: {
+                    store.send(.deleteTodo(todo: todo, context: modelContext))
                 }
-            } label: {
-                Label("수정", systemImage: "pencil")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(DesignTokens.textPrimary)
-
-            Divider().padding(.horizontal, 8)
-
-            Button {
-                showActions = false
-                let rid = todo.reminderID
-                withAnimation(DesignTokens.layoutSpring) { modelContext.delete(todo) }
-                Task { await RemindersSync.shared.delete(reminderID: rid) }
-            } label: {
-                Label("삭제", systemImage: "trash")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(DesignTokens.overdueColor)
+            )
+        case .editForm:
+            EditTodoFormView(todo: todo)
+        case .createList:
+            CreateReminderListPopover(
+                onCancel: { store.send(.openActions) },
+                onCreate: createReminderListForExistingTodo
+            )
+        case .closed:
+            EmptyView()
         }
-        .padding(.vertical, 4)
-        .frame(width: 140)
+    }
+
+    private func createReminderListForExistingTodo(_ title: String, color: NSColor) {
+        store.send(.createReminderList(todo: todo, title: title, color: color))
     }
 
     // MARK: Sub-todo Popover
 
     private var subTodoPopover: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("세부 할일")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DesignTokens.textMeta)
-                    .tracking(0.3)
-                Spacer()
-                Button {
-                    newSubTodoTitle = ""
-                    showSubTodoPopover = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(DesignTokens.dotColor)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            PopoverHeader(title: "세부 할일", onClose: nil)
 
             Divider().padding(.horizontal, 8)
 
-            TextField("제목", text: $newSubTodoTitle)
+            TextField("제목", text: newSubTodoTitleBinding)
                 .textFieldStyle(.plain)
                 .font(DesignTokens.subTodoFont)
                 .foregroundStyle(DesignTokens.textPrimary)
@@ -358,15 +365,14 @@ struct TodoRowView: View {
 
             HStack {
                 Button("취소") {
-                    newSubTodoTitle = ""
-                    showSubTodoPopover = false
+                    store.send(.cancelSubTodo)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(DesignTokens.textSecondary)
                 Spacer()
                 Button("추가") { submitSubTodo() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(newSubTodoTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(store.state.newSubTodoTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
@@ -377,42 +383,6 @@ struct TodoRowView: View {
     }
 
     private func submitSubTodo() {
-        let trimmed = newSubTodoTitle.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        let sub = SubTodo(title: trimmed, order: todo.subTodos.count)
-        sub.parent = todo
-        withAnimation(DesignTokens.layoutSpring) {
-            modelContext.insert(sub)
-            todo.subTodos.append(sub)
-        }
-        newSubTodoTitle = ""
-        showSubTodoPopover = false
-    }
-
-    // MARK: Countdown
-
-    private func startCountdown() {
-        cancelCountdown()
-        let delay = completionDeleteDelay
-        withAnimation(DesignTokens.toggleSpring) { countdownSeconds = delay }
-        countdownTask = Task { @MainActor in
-            do {
-                for remaining in stride(from: delay - 1, through: 1, by: -1) {
-                    try await Task.sleep(for: .seconds(1))
-                    countdownSeconds = remaining
-                }
-                try await Task.sleep(for: .seconds(1))
-                guard todo.isCompleted else { return }
-                let rid = todo.reminderID
-                withAnimation(DesignTokens.toggleSpring) { modelContext.delete(todo) }
-                await RemindersSync.shared.delete(reminderID: rid)
-            } catch { }
-        }
-    }
-
-    private func cancelCountdown() {
-        countdownTask?.cancel()
-        countdownTask = nil
-        withAnimation(DesignTokens.toggleSpring) { countdownSeconds = nil }
+        store.send(.submitSubTodo(todo: todo, context: modelContext))
     }
 }

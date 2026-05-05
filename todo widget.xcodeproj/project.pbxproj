@@ -409,8 +409,10 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "할일을 미리 알림과 양방향으로 동기화하기 위해 접근 권한이 필요합니다.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "할일을 미리 알림과 양방향으로 동기화하기 위해 접근 권한이 필요합니다.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -441,8 +443,10 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "할일을 미리 알림과 양방향으로 동기화하기 위해 접근 권한이 필요합니다.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "할일을 미리 알림과 양방향으로 동기화하기 위해 접근 권한이 필요합니다.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

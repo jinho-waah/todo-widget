@@ -81,6 +81,8 @@ enum DT {
 
     // ── 사이즈 (mode 무관) ───────────────────────────
     static let widgetWidth:  CGFloat = 340
+    /// 윈도우 max height. 이를 초과하면 todo 리스트가 내부 ScrollView 로 스크롤된다.
+    static let widgetMaxHeight: CGFloat = 980
     static let cornerRadius: CGFloat = 24
     static let checkbox:     CGFloat = 19
     static let subCheckbox:  CGFloat = 14
@@ -106,6 +108,11 @@ enum DT {
     /// 기다리면 너무 늦고, 0 이면 row 가 그려지기 전에 popover 가 떠 anchor 가 점프).
     /// layoutSpring 을 손대면 이 값도 같이 조정해야 한다.
     static let rowAppearSettleDelay: Duration = .milliseconds(320)
+
+    /// 같은 anchor 에 popover A 를 닫고 popover B 를 여는 chain 에서 필요한
+    /// 최소 간격. macOS 가 popover dismiss 를 한 프레임에 처리하지 못하는 케이스가
+    /// 있어 이 시간만큼 기다린 뒤 다음 popover 를 띄운다.
+    static let popoverChainDelay: Duration = .milliseconds(50)
 
     // ── Header Button (refined, dark-mode-first) ────
     // 디자인 의도:
@@ -223,6 +230,7 @@ enum DesignTokens {
 
     // Sizes → DT
     static let widgetWidth:        CGFloat = DT.widgetWidth
+    static let widgetMaxHeight:    CGFloat = DT.widgetMaxHeight
     static let cornerRadius:       CGFloat = DT.cornerRadius
     static let checkbox:           CGFloat = DT.checkbox
     static let subCheckbox:        CGFloat = DT.subCheckbox
@@ -242,6 +250,7 @@ enum DesignTokens {
     static let toggleSpring: Animation = DT.toggleSpring
     static let layoutSpring: Animation = DT.layoutSpring
     static let rowAppearSettleDelay: Duration = DT.rowAppearSettleDelay
+    static let popoverChainDelay: Duration = DT.popoverChainDelay
 
     // 편집(재정렬) 모드 진입 시 다른 액션 버튼들에 적용되는 opacity.
     // light/dark 모두에서 "비활성화" 가 인지되도록 충분히 낮게 잡는다.

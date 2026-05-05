@@ -6,15 +6,13 @@ struct SubTodoRowView: View {
     var isEditMode: Bool = false
     @Environment(\.modelContext) private var modelContext
 
-    @State private var showActions = false
-    @State private var showEditForm = false
-    @State private var editTitle = ""
+    @State private var store = SubTodoRowStore()
     @FocusState private var editFieldFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             Button {
-                withAnimation(DesignTokens.toggleSpring) { subTodo.isCompleted.toggle() }
+                store.send(.toggleCompletion(subTodo))
             } label: {
                 checkboxLabel
             }
@@ -31,7 +29,7 @@ struct SubTodoRowView: View {
             Spacer(minLength: 0)
 
             Button {
-                showActions = true
+                store.send(.showActions(true))
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 11, weight: .medium))
@@ -42,16 +40,44 @@ struct SubTodoRowView: View {
             .buttonStyle(.plain)
             .disabled(isEditMode)
             .opacity(isEditMode ? DesignTokens.disabledOpacity : 1.0)
-            .popover(isPresented: $showActions, arrowEdge: .trailing) {
-                actionsPopover
+            .popover(isPresented: showActionsBinding, arrowEdge: .trailing) {
+                RowActionsPopover(
+                    onEdit: {
+                        store.send(.beginEdit(subTodo))
+                    },
+                    onDelete: {
+                        store.send(.delete(subTodo, modelContext))
+                    }
+                )
             }
-            .popover(isPresented: $showEditForm, arrowEdge: .trailing) {
+            .popover(isPresented: showEditFormBinding, arrowEdge: .trailing) {
                 editFormView
             }
         }
         .padding(.leading, DesignTokens.subIndent)
         .padding(.vertical, 4)
         .animation(DesignTokens.toggleSpring, value: isEditMode)
+    }
+
+    private var showActionsBinding: Binding<Bool> {
+        Binding(
+            get: { store.state.showActions },
+            set: { store.send(.showActions($0)) }
+        )
+    }
+
+    private var showEditFormBinding: Binding<Bool> {
+        Binding(
+            get: { store.state.showEditForm },
+            set: { if !$0 { store.send(.closeEditForm) } }
+        )
+    }
+
+    private var editTitleBinding: Binding<String> {
+        Binding(
+            get: { store.state.editTitle },
+            set: { store.send(.updateEditTitle($0)) }
+        )
     }
 
     @ViewBuilder
@@ -77,68 +103,15 @@ struct SubTodoRowView: View {
         .animation(DesignTokens.toggleSpring, value: subTodo.isCompleted)
     }
 
-    // MARK: Actions Popover
-
-    private var actionsPopover: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                showActions = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    editTitle = subTodo.title
-                    showEditForm = true
-                }
-            } label: {
-                Label("수정", systemImage: "pencil")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(DesignTokens.textPrimary)
-
-            Divider().padding(.horizontal, 8)
-
-            Button {
-                showActions = false
-                withAnimation(DesignTokens.layoutSpring) { modelContext.delete(subTodo) }
-            } label: {
-                Label("삭제", systemImage: "trash")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(DesignTokens.overdueColor)
-        }
-        .padding(.vertical, 4)
-        .frame(width: 140)
-    }
-
     // MARK: Edit Form
 
     private var editFormView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("수정")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(DesignTokens.textMeta)
-                    .tracking(0.3)
-                Spacer()
-                Button { showEditForm = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(DesignTokens.dotColor)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            PopoverHeader(title: "수정") { store.send(.closeEditForm) }
 
             Divider().padding(.horizontal, 8)
 
-            TextField("제목", text: $editTitle)
+            TextField("제목", text: editTitleBinding)
                 .textFieldStyle(.plain)
                 .font(DesignTokens.subTodoFont)
                 .foregroundStyle(DesignTokens.textPrimary)
@@ -150,13 +123,13 @@ struct SubTodoRowView: View {
             Divider().padding(.horizontal, 8)
 
             HStack {
-                Button("취소") { showEditForm = false }
+                Button("취소") { store.send(.closeEditForm) }
                     .buttonStyle(.plain)
                     .foregroundStyle(DesignTokens.textSecondary)
                 Spacer()
                 Button("저장") { saveEdit() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(editTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(store.state.editTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
@@ -167,9 +140,6 @@ struct SubTodoRowView: View {
     }
 
     private func saveEdit() {
-        let trimmed = editTitle.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        subTodo.title = trimmed
-        showEditForm = false
+        store.send(.saveEdit(subTodo))
     }
 }
