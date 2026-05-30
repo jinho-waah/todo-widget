@@ -17,8 +17,12 @@ struct CountdownBadge: View {
     var body: some View {
         Button(action: onCancel) {
             ZStack {
+                // dark 모드에서 검정 stroke 는 글라스 위에서 안 보임 → light/dark 분기.
                 Circle()
-                    .stroke(Color.black.opacity(0.10), lineWidth: 2)
+                    .stroke(
+                        Color(light: .black.opacity(0.10), dark: .white.opacity(0.18)),
+                        lineWidth: 2
+                    )
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(

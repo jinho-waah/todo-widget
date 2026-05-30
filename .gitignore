@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# Xcode user/build artifacts
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Local tool artifacts
+.antigravitycli/

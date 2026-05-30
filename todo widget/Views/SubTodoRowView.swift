@@ -124,11 +124,10 @@ struct SubTodoRowView: View {
 
             HStack {
                 Button("취소") { store.send(.closeEditForm) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(DesignTokens.textSecondary)
+                    .buttonStyle(.glass)
                 Spacer()
                 Button("저장") { saveEdit() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .disabled(store.state.editTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 14)

@@ -70,7 +70,7 @@ final class TodoListStore {
             withAnimation(DesignTokens.toggleSpring) {
                 state.isEditMode = editing
             }
-            NotificationCenter.default.post(name: .widgetEditModeChanged, object: editing)
+            WidgetWindowChannel.shared.reportEditModeChanged(editing)
 
         case .setScrollEdges(let above, let below):
             withAnimation(.easeOut(duration: 0.18)) {
@@ -79,7 +79,7 @@ final class TodoListStore {
             }
 
         case .widgetHeightChanged(let height):
-            NotificationCenter.default.post(name: .widgetContentHeightChanged, object: height)
+            WidgetWindowChannel.shared.reportContentHeight(height)
 
         case .permissionBannerTapped:
             switch sync.status {

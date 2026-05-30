@@ -67,7 +67,10 @@ final class RemindersSync {
             return
         }
 
-        let reminders = await eventStore.fetchAllReminders()
+        guard let reminders = await eventStore.fetchAllReminders() else {
+            remindersLog.warning("pull skipped — reminders fetch returned nil")
+            return
+        }
         remindersLog.info("pull — \(reminders.count) reminders across \(self.eventStore.calendarCount) reminder lists")
 
         isApplyingRemoteChange = true
@@ -76,9 +79,7 @@ final class RemindersSync {
         await reconciler.reconcile(
             reminders: reminders,
             in: modelContext,
-            belongsToDefaultCalendar: { [eventStore] reminder in
-                eventStore.belongsToDefaultCalendar(reminder)
-            },
+            pruneMissingRemoteItems: false,
             pushUnsyncedTodo: { [weak self] todo in
                 await self?.push(todo, skipGuard: true)
             }

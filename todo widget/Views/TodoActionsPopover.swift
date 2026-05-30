@@ -15,23 +15,17 @@ struct TodoActionsPopover: View {
     let onCreateList: () -> Void
     let onDelete: () -> Void
 
-    private var currentList: ReminderList? {
-        lists.first { $0.id == currentListID }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !lists.isEmpty {
-                listPicker
-                    .padding(.horizontal, 10)
-                    .padding(.top, 6)
-                    .padding(.bottom, 6)
-                Divider().padding(.horizontal, 8)
-            }
-
-            actionButton(label: "수정", icon: "pencil", color: DesignTokens.textPrimary, action: onEdit)
+            listPicker
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+                .padding(.bottom, 6)
             Divider().padding(.horizontal, 8)
-            actionButton(label: "삭제", icon: "trash", color: DesignTokens.overdueColor, action: onDelete)
+
+            PopoverActionButton(label: "수정", icon: "pencil", color: DesignTokens.textPrimary, action: onEdit)
+            Divider().padding(.horizontal, 8)
+            PopoverActionButton(label: "삭제", icon: "trash", color: DesignTokens.overdueColor, action: onDelete)
         }
         .padding(.vertical, 4)
         .frame(width: 180)
@@ -40,23 +34,12 @@ struct TodoActionsPopover: View {
     // MARK: List Picker
 
     private var listPicker: some View {
-        Menu {
-            ForEach(lists) { list in
-                Button {
-                    onSelectList(list.id)
-                } label: {
-                    if list.id == currentListID {
-                        Label(list.title, systemImage: "checkmark")
-                    } else {
-                        Text(list.title)
-                    }
-                }
-            }
-            Divider()
-            Button(action: onCreateList) {
-                Label("새 목록 생성", systemImage: "plus")
-            }
-        } label: {
+        ReminderListPickerMenu(
+            lists: lists,
+            currentListID: currentListID,
+            onSelectList: onSelectList,
+            onCreateList: onCreateList
+        ) { currentList in
             HStack(spacing: 8) {
                 Circle()
                     .fill(currentList?.color ?? DesignTokens.systemBlue)
@@ -82,27 +65,5 @@ struct TodoActionsPopover: View {
             )
             .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-    }
-
-    // MARK: Action Button (수정 / 삭제)
-
-    private func actionButton(
-        label: String,
-        icon: String,
-        color: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(label, systemImage: icon)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(color)
     }
 }

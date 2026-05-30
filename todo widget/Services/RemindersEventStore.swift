@@ -108,20 +108,15 @@ final class RemindersEventStore {
         return nil
     }
 
-    func fetchAllReminders() async -> [EKReminder] {
-        guard hasAccess else { return [] }
+    func fetchAllReminders() async -> [EKReminder]? {
+        guard hasAccess else { return nil }
         store.reset()
         let predicate = store.predicateForReminders(in: nil)
         return await withCheckedContinuation { continuation in
             store.fetchReminders(matching: predicate) { result in
-                continuation.resume(returning: result ?? [])
+                continuation.resume(returning: result)
             }
         }
-    }
-
-    func belongsToDefaultCalendar(_ reminder: EKReminder) -> Bool {
-        guard let defaultCalendar else { return false }
-        return reminder.calendar.calendarIdentifier == defaultCalendar.calendarIdentifier
     }
 
     func save(_ todo: Todo) throws {
@@ -144,9 +139,7 @@ final class RemindersEventStore {
         reminder.title = todo.title
         reminder.notes = todo.todoDescription
         reminder.isCompleted = todo.isCompleted
-        reminder.dueDateComponents = todo.dueDate.map {
-            Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: $0)
-        }
+        reminder.dueDateComponents = RemindersDateMapper.dueDateComponents(from: todo.dueDate)
 
         try store.save(reminder, commit: true)
         todo.reminderID = reminder.calendarItemIdentifier

@@ -25,10 +25,6 @@ struct EditTodoFormView: View {
         todo.reminderListID ?? RemindersSync.shared.defaultListID
     }
 
-    private var currentList: ReminderList? {
-        store.state.availableLists.first { $0.id == currentListID }
-    }
-
     var body: some View {
         if store.state.showCreateListForm {
             CreateReminderListPopover(
@@ -66,7 +62,7 @@ struct EditTodoFormView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
 
-            if store.isNew, !store.state.availableLists.isEmpty {
+            if store.isNew {
                 Divider().padding(.horizontal, 8)
                 listRow
             }
@@ -84,11 +80,10 @@ struct EditTodoFormView: View {
 
             HStack {
                 Button("취소") { store.send(.dismiss(dismiss)) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(DesignTokens.textSecondary)
+                    .buttonStyle(.glass)
                 Spacer()
                 Button(store.isNew ? "추가" : "저장") { save() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .disabled(store.state.title.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(.horizontal, 14)
@@ -119,25 +114,12 @@ struct EditTodoFormView: View {
     // MARK: List / Date / Time Rows
 
     private var listRow: some View {
-        Menu {
-            ForEach(store.state.availableLists) { list in
-                Button {
-                    store.send(.selectList(todo: todo, list.id))
-                } label: {
-                    if list.id == currentListID {
-                        Label(list.title, systemImage: "checkmark")
-                    } else {
-                        Text(list.title)
-                    }
-                }
-            }
-            Divider()
-            Button {
-                store.send(.showCreateListForm(true))
-            } label: {
-                Label("새 목록 생성", systemImage: "plus")
-            }
-        } label: {
+        ReminderListPickerMenu(
+            lists: store.state.availableLists,
+            currentListID: currentListID,
+            onSelectList: { store.send(.selectList(todo: todo, $0)) },
+            onCreateList: { store.send(.showCreateListForm(true)) }
+        ) { currentList in
             HStack(spacing: 8) {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 11, weight: .medium))
@@ -163,9 +145,6 @@ struct EditTodoFormView: View {
             .padding(.vertical, 9)
             .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
     }
 
     private func createReminderListForNewTodo(_ listTitle: String, color: NSColor) {
@@ -190,9 +169,9 @@ struct EditTodoFormView: View {
                 )
                 .labelsHidden()
                 .datePickerStyle(.compact)
-                // ja_JP locale 의 short date format 이 yyyy/MM/dd 라
-                // 시스템 locale 과 무관하게 슬래시 포맷을 강제한다.
-                .environment(\.locale, Locale(identifier: "ja_JP"))
+                // 앱이 localized resource 를 선언하지 않으면 SwiftUI 의 Locale 환경이
+                // 시스템 1순위 언어 대신 개발 region 으로 떨어진다. 사용자 언어를 직접 주입.
+                .environment(\.locale, .userPreferred)
 
                 Spacer()
 
@@ -237,6 +216,7 @@ struct EditTodoFormView: View {
                 )
                 .labelsHidden()
                 .datePickerStyle(.compact)
+                .environment(\.locale, .userPreferred)
 
                 Spacer()
 

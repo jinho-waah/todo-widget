@@ -79,11 +79,10 @@ struct CreateReminderListPopover: View {
 
             HStack {
                 Button("취소", action: onCancel)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(DesignTokens.textSecondary)
+                    .buttonStyle(.glass)
                 Spacer()
                 Button("생성") { submit() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 14)

@@ -7,7 +7,7 @@ struct RemindersReconciler {
     func reconcile(
         reminders: [EKReminder],
         in context: ModelContext,
-        belongsToDefaultCalendar: (EKReminder) -> Bool,
+        pruneMissingRemoteItems: Bool,
         pushUnsyncedTodo: (Todo) async -> Void
     ) async {
         let todos: [Todo]
@@ -27,14 +27,17 @@ struct RemindersReconciler {
             }
         }
 
-        deleteLocallyRemovedRemoteItems(todos: todos, remindersByID: remindersByID, context: context)
+        if pruneMissingRemoteItems {
+            deleteLocallyRemovedRemoteItems(todos: todos, remindersByID: remindersByID, context: context)
+        } else {
+            remindersLog.debug("skip pruning local todos from remote fetch")
+        }
         applyMappedReminders(reminders, todosByReminderID: todosByReminderID)
-        importDefaultListReminders(
+        importReminders(
             reminders,
             existingTodoCount: todos.count,
             todosByReminderID: todosByReminderID,
-            context: context,
-            belongsToDefaultCalendar: belongsToDefaultCalendar
+            context: context
         )
 
         for todo in todos where todo.reminderID == nil {
@@ -67,17 +70,16 @@ struct RemindersReconciler {
         }
     }
 
-    private func importDefaultListReminders(
+    private func importReminders(
         _ reminders: [EKReminder],
         existingTodoCount: Int,
         todosByReminderID: [String: Todo],
-        context: ModelContext,
-        belongsToDefaultCalendar: (EKReminder) -> Bool
+        context: ModelContext
     ) {
         var importedCount = 0
         for reminder in reminders
-            where belongsToDefaultCalendar(reminder)
-                && !reminder.isCompleted
+            where !reminder.isCompleted
+                && reminder.calendar.allowsContentModifications
                 && todosByReminderID[reminder.calendarItemIdentifier] == nil {
             let todo = Todo(title: reminder.title ?? "", order: existingTodoCount + importedCount)
             todo.reminderID = reminder.calendarItemIdentifier

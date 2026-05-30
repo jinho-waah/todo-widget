@@ -55,12 +55,6 @@ enum DT {
     static let dividerHeader  = Color(light: .black.opacity(0.09), dark: .white.opacity(0.12))
     static let dividerItem    = Color(light: .black.opacity(0.07), dark: .white.opacity(0.08))
 
-    // ── Glass (외곽 카드) ─────────────────────────────
-    static let glassTint         = Color(light: .white.opacity(0.42), dark: .clear)
-    static let glassStroke       = Color(light: .white.opacity(0.55), dark: .white.opacity(0.18))
-    static let glassHighlightTop = Color(light: .white.opacity(0.70), dark: .white.opacity(0.18))
-    static let glassShadowBottom = Color(light: .white.opacity(0.10), dark: .white.opacity(0.04))
-
     // ── 헤더 버튼 ────────────────────────────────────
     static let buttonFill      = Color(light: .white.opacity(0.55), dark: .white.opacity(0.13))
     static let buttonStroke    = Color(light: .white.opacity(0.70), dark: .white.opacity(0.25))
@@ -194,11 +188,8 @@ enum DesignTokens {
     static let headerDivider      = DT.dividerHeader
     static let divider            = DT.dividerItem
 
-    // Glass / button → DT
-    static let glassFill            = DT.glassTint
-    static let glassStroke          = DT.glassStroke
-    static let glassHighlight       = DT.glassHighlightTop
-    static let glassShadowBottom    = DT.glassShadowBottom
+    // Button / Checkbox → DT
+    // (Glass card 자체는 macOS 26 `.glassEffect` 가 처리하므로 별도 토큰 없음.)
     static let buttonFill           = DT.buttonFill
     static let buttonStroke         = DT.buttonStroke
     static let buttonHighlight      = DT.buttonHighlight
@@ -206,9 +197,6 @@ enum DesignTokens {
     static let subCheckboxHighlight = DT.subCheckInnerHL
     static let checkboxFill         = DT.checkboxIdleFill
     static let subCheckboxFill      = DT.subCheckIdleFill
-
-    // 폼/팝오버용 (DT에 없음 — 기존 값 유지)
-    static let textFieldFill        = Color.white.opacity(0.72)
 
     // Shadows → DT
     static let shadowDeep           = DT.shadowDeep

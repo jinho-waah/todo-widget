@@ -41,6 +41,10 @@ final class EditTodoFormStore {
         switch intent {
         case .appeared:
             state.availableLists = RemindersSync.shared.availableLists()
+            Task { @MainActor in
+                await RemindersSync.shared.refresh()
+                state.availableLists = RemindersSync.shared.availableLists()
+            }
 
         case .updateTitle(let title):
             state.title = title

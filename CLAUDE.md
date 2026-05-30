@@ -72,7 +72,7 @@ The window is **manually driven**, not SwiftUI-resized. Two coordinated pieces:
 
 `AppDelegate` is also responsible for:
 - **LSUIElement pattern** — `windowShouldClose` orders the window out instead of closing, and `applicationShouldTerminateAfterLastWindowClosed` returns false. The app stays alive in the background; quit is `⌘Q` (installed via `installMainMenu`, since LSUIElement hides the menu bar but still honors key equivalents).
-- **Global hotkey** `⌃+1` (via `HotKey` SPM dep) — toggles visibility, raises window level to `.floating` and activates app when summoning. `applicationDidResignActive` lowers level back to `.normal` after a 200 ms grace (popovers can produce a spurious resignActive that immediately re-activates).
+- **Global hotkey** `⌃+1` (via `HotKey` SPM dep) — toggles visibility, keeps the window at `.floating`, and activates app when summoning. The widget is not demoted when the app resigns active, so it stays visible above regular app windows and across Spaces.
 - **Edit-mode drag conflict** — `Notification.Name.widgetEditModeChanged` toggles `isMovableByWindowBackground` so window-drag doesn't fight todo-reorder drag.
 - **Reminders re-sync on activation** — `applicationDidBecomeActive` calls `RemindersSync.shared.refresh()` so a permission granted while the app was inactive is picked up next time the user focuses it.
 

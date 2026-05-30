@@ -86,6 +86,10 @@ final class TodoRowStore {
         case .openActions:
             state.availableLists = RemindersSync.shared.availableLists()
             state.moreMenu = .actions
+            Task { @MainActor in
+                await RemindersSync.shared.refresh()
+                state.availableLists = RemindersSync.shared.availableLists()
+            }
 
         case .closeMoreMenu:
             state.moreMenu = .closed
