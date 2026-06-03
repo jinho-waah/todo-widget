@@ -29,6 +29,11 @@ macOS SwiftUI app that renders as a floating, always-on-top widget. No ViewModel
 - `SubTodoRowView` — child item row with its own checkbox.
 - `CheckboxView`, `GlassCardBackground`, `AppBackground` — small shared visual primitives.
 
+### Tabs + Calendar (`Views/WidgetTab.swift`, `Views/Calendar/`, `Services/Calendar*.swift`)
+The widget has two tabs — **캘린더 (calendar)** and **미리 알림 (reminders)** — persisted via `@AppStorage("selectedWidgetTab")` in `TodoListView` (the shell). `WidgetTabBar` is a Liquid-Glass segmented control. The shell owns the single window-height reporter, glass card, and width; only the tab content swaps inside it (do **not** add a second height reporter in `CalendarView`).
+
+The calendar is an itsycal-style **read+write** view over macOS Calendar (EventKit `.event` — a separate permission from Reminders). Events are not SwiftData-backed; they're value-type snapshots (`CalendarEvent`). `CalendarService.shared` (`@MainActor @Observable`) is the facade paralleling `RemindersSync`: it caches a fetch window around the displayed month, observes `.EKEventStoreChanged`, and exposes `createEvent/update/delete` as the entry points a future Claude "message → event" agent will call. `CalendarEventStore` mirrors `RemindersEventStore`, including the `recreateStore()`-after-permission-grant fix and `requestFullAccessToEvents`. `CalendarView` lays out month-nav → fixed grid (`CalendarGridView`/`CalendarDayCell`) → divider → a capped agenda `ScrollView` of `CalendarEventRow`s; `CalendarEventFormView` handles create/edit. `INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription` is set in both build configs.
+
 ### Design system (`Style/Tokens.swift`)
 Two enums live here. `DT` holds raw light/dark dynamic values (colors, sizes, fonts, animations). `DesignTokens` is the view-facing alias namespace and is what every view should use. New tokens go in both: `DT` for the raw value, `DesignTokens` for the semantic name view code consumes.
 

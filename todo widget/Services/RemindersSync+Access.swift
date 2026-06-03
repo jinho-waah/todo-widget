@@ -13,18 +13,28 @@ extension RemindersSync {
 
         switch authStatus {
         case .fullAccess:
+            accessConfirmed = true
             eventStore.markAccessGranted()
             status = .granted
             lastRequestError = nil
             return .granted
 
         case .denied, .restricted:
+            // 명시적 거부/제한만 권한을 깎아내린다 (System Settings 에서 끈 경우).
+            accessConfirmed = false
             eventStore.markAccessDenied()
             status = .denied
             remindersLog.warning("Reminders access denied/restricted — enable in System Settings → Privacy → Reminders.")
             return .blocked
 
         case .notDetermined, .writeOnly:
+            // 디버그 빌드 TCC 버그: grant 후에도 .notDetermined 로 보고됨. 이번 세션에서 이미
+            // 접근을 확인했다면 풀린 것으로 보지 않고 granted 유지 → 배너 깜빡임 방지.
+            if accessConfirmed {
+                eventStore.markAccessGranted()
+                status = .granted
+                return .granted
+            }
             eventStore.markAccessDenied()
             status = .notDetermined
             guard requestIfNeeded else {
@@ -61,6 +71,7 @@ extension RemindersSync {
                 return .blocked
             }
 
+            accessConfirmed = true
             eventStore.markAccessGranted()
             status = .granted
             lastRequestError = nil

@@ -7,16 +7,39 @@ struct TodoListView: View {
     private var todos: [Todo]
 
     @State private var store = TodoListStore()
+    @AppStorage("selectedWidgetTab") private var selectedTabRaw = WidgetTab.reminders.rawValue
 
-    /// 헤더(상하 패딩 18+12) + divider(0.5) + 리스트 bottom padding(10) 을 합친 chrome 높이.
+    /// 헤더(상하 패딩 18+12) + divider(0.5) + 탭바 + 리스트 bottom padding(10) 을 합친 chrome 높이.
     /// 윈도우 max(980) 에서 이만큼 빼서 ScrollView 의 cap 으로 사용.
-    private var chromeHeight: CGFloat { 60 }
+    private var chromeHeight: CGFloat { 60 + tabBarHeight }
+    /// 탭바(아이콘+텍스트 vertical 8 + track padding 4 + top 12 + bottom 10 ≈ 60).
+    private var tabBarHeight: CGFloat { 60 }
     private var maxListHeight: CGFloat { DesignTokens.widgetMaxHeight - chromeHeight }
 
+    private var selectedTab: WidgetTab { WidgetTab(rawValue: selectedTabRaw) ?? .reminders }
+
+    /// 캘린더 아젠다 cap — 약 8개 행이 보이고 그 이후로는 내부 스크롤(미리알림 패턴). 그리드는 고정.
+    private var calendarAgendaMaxHeight: CGFloat { 400 }
+
+    private var tabBinding: Binding<WidgetTab> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                selectedTabRaw = newValue.rawValue
+                // 캘린더 탭엔 재정렬이 없으므로 edit 모드를 강제 해제해
+                // 윈도우-배경 드래그가 비활성으로 stranded 되는 것을 막는다.
+                if newValue != .reminders, store.state.isEditMode {
+                    store.send(.setEditMode(false))
+                }
+            }
+        )
+    }
+
     var body: some View {
-        // Widget 본체는 intrinsic height (todo 개수에 따라 결정, 단 max 980).
+        // Widget 본체는 intrinsic height (콘텐츠에 따라 결정, 단 max 980).
         let widget = VStack(spacing: 0) {
             HeaderView(
+                tab: selectedTab,
                 isEditMode: isEditModeBinding,
                 onAdd: { store.send(.addTodo(todos: todos, context: modelContext)) }
             )
@@ -24,17 +47,26 @@ struct TodoListView: View {
                 .fill(DesignTokens.headerDivider)
                 .frame(height: 0.5)
                 .padding(.horizontal, 4)
-            // 권한이 없으면 헤더 바로 아래에 banner.
-            // notDetermined/requestFailed 는 실제 권한 요청을 먼저 실행하고,
-            // denied 는 사용자가 이미 거부한 상태이므로 System Settings 로 보낸다.
-            if store.showsPermissionBanner {
-                RemindersPermissionBanner(
-                    title: store.remindersPermissionTitle,
-                    subtitle: store.remindersPermissionSubtitle,
-                    onTap: { store.send(.permissionBannerTapped) }
-                )
+            WidgetTabBar(selection: tabBinding)
+
+            // 탭별 콘텐츠 swap. 측정/글래스/width 는 이 셸 VStack 이 소유하고,
+            // 콘텐츠만 교체된다 (높이 리포터는 하나로 유지).
+            switch selectedTab {
+            case .reminders:
+                // 권한이 없으면 헤더 바로 아래에 banner.
+                // notDetermined/requestFailed 는 실제 권한 요청을 먼저 실행하고,
+                // denied 는 사용자가 이미 거부한 상태이므로 System Settings 로 보낸다.
+                if store.showsPermissionBanner {
+                    RemindersPermissionBanner(
+                        title: store.remindersPermissionTitle,
+                        subtitle: store.remindersPermissionSubtitle,
+                        onTap: { store.send(.permissionBannerTapped) }
+                    )
+                }
+                scrollableTodoList
+            case .calendar:
+                CalendarView(agendaMaxHeight: calendarAgendaMaxHeight)
             }
-            scrollableTodoList
         }
         .frame(width: DesignTokens.widgetWidth)
         .background(GlassCardBackground())

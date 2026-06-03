@@ -29,6 +29,13 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
         .fullScreenAuxiliary
     ]
 
+    /// 디스플레이 구성 변경(모니터 연결/해제·해상도 변경) 시 화면 밖으로 사라진 창 복구용 옵저버.
+    private var screenObserver: NSObjectProtocol?
+
+    deinit {
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+    }
+
     // MARK: - Lifecycle
 
     /// SwiftUI 가 생성한 첫 윈도우를 가져와 위젯용 설정을 적용하고 TopAnchoredWindow 로 swap 한다.
@@ -43,6 +50,15 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
         guard let anchored = rawWindow as? TopAnchoredWindow else { return }
         anchored.enableTopAnchor()
         window = anchored
+
+        // 모니터 연결/해제·해상도 변경으로 창이 사라지는 듀얼모니터 케이스 복구.
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.window?.recoverOntoScreen() }
+        }
 
         DispatchQueue.main.async { [weak self] in
             self?.applyFittingContentSize()
@@ -98,11 +114,12 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
             size: NSSize(width: DesignTokens.widgetWidth, height: cappedHeight)
         )
         let targetFrameSize = window.frameRect(forContentRect: contentRect).size
+
+        // origin 은 TopAnchoredWindow.adjusted() 가 저장된 좌상단 앵커로 강제하므로
+        // 여기선 size 만 맞춘다. size 변화가 없으면 skip.
+        guard targetFrameSize != window.frame.size else { return }
         var targetFrame = window.frame
         targetFrame.size = targetFrameSize
-        targetFrame.origin.y = window.anchorTopY - targetFrameSize.height
-
-        guard targetFrame != window.frame else { return }
         window.setFrame(targetFrame, display: true, animate: false)
     }
 
@@ -112,6 +129,18 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
         // LSUIElement: X 버튼은 종료가 아니라 숨김. 사용자는 ⌃+1 로 재호출, ⌘Q 로 종료.
         sender.orderOut(nil)
         return false
+    }
+
+    /// 창이 이동할 때마다 호출 (사용자 배경 드래그 포함 — 이건 setFrameOrigin 을 안 거치므로
+    /// 드래그를 잡는 **유일한** 신호다). 우리 리사이즈는 top-left 를 항상 anchor 에 맞추므로,
+    /// 현재 좌상단이 anchor 와 epsilon 이상 벌어졌으면 = 사용자가 드래그로 옮긴 것 → anchor 채택.
+    /// 픽셀정렬(Retina) 오차로 인한 거짓 갱신을 막기 위해 2pt epsilon 을 둔다 (== 비교 금지).
+    func windowDidMove(_ notification: Notification) {
+        guard let window, window.anchorEnabled else { return }
+        let dx = abs(window.frame.minX - window.anchorLeftX)
+        let dy = abs(window.frame.maxY - window.anchorTopY)
+        guard dx > 2 || dy > 2 else { return }
+        window.adoptCurrentFrameAsAnchor()
     }
 
     // MARK: - Private
@@ -143,7 +172,9 @@ final class WidgetWindowController: NSObject, NSWindowDelegate {
         window.level = .normal
         window.collectionBehavior = collectionBehavior
         window.isMovableByWindowBackground = !isEditMode
-        window.refreshTopAnchor()
+        // 화면 밖으로 밀려났으면(Spaces/디스플레이 변경) 앵커를 화면 안으로 끌어와 복구.
+        // 화면 안이면 no-op 이라 사용자가 둔 위치는 보존된다.
+        window.recoverOntoScreen()
         applyFittingContentSize()
     }
 

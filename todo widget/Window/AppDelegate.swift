@@ -41,7 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         windowController.restorePresentation()
         // 앱 시작 시 권한이 거부됐다가 사용자가 System Settings 에서 켜준 경우 자동 복구용.
-        Task { @MainActor in await RemindersSync.shared.refresh() }
+        Task { @MainActor in
+            await RemindersSync.shared.refresh()
+            await CalendarService.shared.refresh()
+        }
     }
 
     // MARK: - Wiring

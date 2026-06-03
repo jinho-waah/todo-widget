@@ -18,10 +18,10 @@ final class Todo {
     /// 따라 자동 업데이트 → 사용자가 미리 알림 앱에서 list 를 옮겨도 동기화된다.
     var reminderListID: String?
 
-    init(title: String = "", todoDescription: String? = nil, order: Int = 0) {
+    init(title: String = "", order: Int = 0) {
         self.id = UUID()
         self.title = title
-        self.todoDescription = todoDescription
+        self.todoDescription = nil
         self.dueDate = nil
         self.isCompleted = false
         self.subTodos = []

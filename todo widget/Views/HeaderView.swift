@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HeaderView: View {
+    let tab: WidgetTab
     @Binding var isEditMode: Bool
     let onAdd: () -> Void
 
@@ -11,22 +12,29 @@ struct HeaderView: View {
         HStack(alignment: .center) {
             titleSection
             Spacer()
-            HStack(spacing: 8) {
-                headerButton(icon: "plus", action: onAdd)
-                    .disabled(isEditMode)
-                    .opacity(isEditMode ? DesignTokens.disabledOpacity : 1.0)
-                    .animation(DesignTokens.toggleSpring, value: isEditMode)
-                // 편집 모드 토글: 아이콘은 동일하게 유지하고 active tint 만 바꿔
-                // 형태 점프 없이 상태가 명확하게 보이도록 한다.
-                headerButton(
-                    icon: "arrow.up.arrow.down",
-                    isActive: isEditMode,
-                    iconSize: 11
-                ) {
-                    isEditMode.toggle()
+            // 추가/재정렬 버튼은 미리 알림 탭 전용. 캘린더 탭은 자체 툴바(월 네비 + 추가)를
+            // CalendarView 안에 둬서 생성 popover anchor 를 캘린더 영역에 가깝게 유지한다.
+            if tab == .reminders {
+                HStack(spacing: 8) {
+                    headerButton(icon: "plus", action: onAdd)
+                        .disabled(isEditMode)
+                        .opacity(isEditMode ? DesignTokens.disabledOpacity : 1.0)
+                        .animation(DesignTokens.toggleSpring, value: isEditMode)
+                    // 편집 모드 토글: 아이콘은 동일하게 유지하고 active tint 만 바꿔
+                    // 형태 점프 없이 상태가 명확하게 보이도록 한다.
+                    headerButton(
+                        icon: "arrow.up.arrow.down",
+                        isActive: isEditMode,
+                        iconSize: 11
+                    ) {
+                        isEditMode.toggle()
+                    }
                 }
             }
         }
+        // 두 탭의 헤더 높이를 동일하게 — 캘린더 탭엔 오른쪽 버튼이 없어 헤더가 더 낮아지던 문제 해결.
+        // 버튼(28pt)이 없어도 같은 높이를 확보하도록 row 높이를 고정한다.
+        .frame(height: DesignTokens.headerButton)
         .padding(EdgeInsets(top: 18, leading: 20, bottom: 12, trailing: 20))
     }
 

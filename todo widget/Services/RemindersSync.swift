@@ -24,6 +24,13 @@ final class RemindersSync {
 
     @ObservationIgnored private(set) var isApplyingRemoteChange = false
 
+    /// 이번 세션에서 한 번이라도 접근이 확인됐는지 (grant 성공 또는 fetch 성공).
+    /// 디버그(ad-hoc 서명) 빌드에선 grant 후에도 `authorizationStatus` 가 계속 `.notDetermined`
+    /// 로 보고되는 TCC 버그가 있어, 이 플래그가 켜진 뒤엔 일시적 `.notDetermined` 읽기로
+    /// 권한을 깎아내리지 않는다 (배너가 계속 다시 뜨는 "권한 풀림" 증상 방지). 세션 한정 —
+    /// 새 실행마다 false 로 시작해 실제 권한 상태를 다시 확인한다.
+    @ObservationIgnored var accessConfirmed = false
+
     private init() {}
 
     func start(with context: ModelContext) {
@@ -71,6 +78,9 @@ final class RemindersSync {
             remindersLog.warning("pull skipped — reminders fetch returned nil")
             return
         }
+        // fetch 성공 = 접근이 실제로 동작함 (authorizationStatus 가 거짓으로 .notDetermined 를
+        // 보고하더라도). 이후 일시적 .notDetermined 읽기로 권한이 풀리지 않게 한다.
+        accessConfirmed = true
         remindersLog.info("pull — \(reminders.count) reminders across \(self.eventStore.calendarCount) reminder lists")
 
         isApplyingRemoteChange = true
@@ -79,7 +89,6 @@ final class RemindersSync {
         await reconciler.reconcile(
             reminders: reminders,
             in: modelContext,
-            pruneMissingRemoteItems: false,
             pushUnsyncedTodo: { [weak self] todo in
                 await self?.push(todo, skipGuard: true)
             }

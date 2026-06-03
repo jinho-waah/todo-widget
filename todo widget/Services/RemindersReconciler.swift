@@ -7,7 +7,6 @@ struct RemindersReconciler {
     func reconcile(
         reminders: [EKReminder],
         in context: ModelContext,
-        pruneMissingRemoteItems: Bool,
         pushUnsyncedTodo: (Todo) async -> Void
     ) async {
         let todos: [Todo]
@@ -18,20 +17,12 @@ struct RemindersReconciler {
             return
         }
 
-        let remindersByID = Dictionary(uniqueKeysWithValues: reminders.map {
-            ($0.calendarItemIdentifier, $0)
-        })
         let todosByReminderID: [String: Todo] = todos.reduce(into: [:]) { result, todo in
             if let reminderID = todo.reminderID {
                 result[reminderID] = todo
             }
         }
 
-        if pruneMissingRemoteItems {
-            deleteLocallyRemovedRemoteItems(todos: todos, remindersByID: remindersByID, context: context)
-        } else {
-            remindersLog.debug("skip pruning local todos from remote fetch")
-        }
         applyMappedReminders(reminders, todosByReminderID: todosByReminderID)
         importReminders(
             reminders,
@@ -45,18 +36,6 @@ struct RemindersReconciler {
         }
 
         try? context.save()
-    }
-
-    private func deleteLocallyRemovedRemoteItems(
-        todos: [Todo],
-        remindersByID: [String: EKReminder],
-        context: ModelContext
-    ) {
-        for todo in todos {
-            if let reminderID = todo.reminderID, remindersByID[reminderID] == nil {
-                context.delete(todo)
-            }
-        }
     }
 
     private func applyMappedReminders(

@@ -58,7 +58,6 @@ enum DT {
     // ── 헤더 버튼 ────────────────────────────────────
     static let buttonFill      = Color(light: .white.opacity(0.55), dark: .white.opacity(0.13))
     static let buttonStroke    = Color(light: .white.opacity(0.70), dark: .white.opacity(0.25))
-    static let buttonHighlight = Color(light: .white.opacity(0.50), dark: .white.opacity(0.18))
     static let buttonIcon      = Color(light: .black.opacity(0.72), dark: .white.opacity(0.82))
 
     // ── 체크박스 idle fill ────────────────────────────
@@ -192,7 +191,6 @@ enum DesignTokens {
     // (Glass card 자체는 macOS 26 `.glassEffect` 가 처리하므로 별도 토큰 없음.)
     static let buttonFill           = DT.buttonFill
     static let buttonStroke         = DT.buttonStroke
-    static let buttonHighlight      = DT.buttonHighlight
     static let checkboxHighlight    = DT.checkInnerHL
     static let subCheckboxHighlight = DT.subCheckInnerHL
     static let checkboxFill         = DT.checkboxIdleFill
@@ -209,12 +207,6 @@ enum DesignTokens {
         light: Color(red: 0.88, green: 0.20, blue: 0.20),
         dark:  Color(red: 1.00, green: 0.42, blue: 0.38)
     )
-
-    // Background gradient stops (legacy — 라이트만, AppBackground 가 다크/라이트 모두 처리)
-    static let gradientStop1        = Color(red: 1.00, green: 0.42, blue: 0.62)
-    static let gradientStop2        = Color(red: 0.75, green: 0.42, blue: 1.00)
-    static let gradientStop3        = Color(red: 0.43, green: 0.54, blue: 1.00)
-    static let gradientStop4        = Color(red: 0.31, green: 0.82, blue: 0.77)
 
     // Sizes → DT
     static let widgetWidth:        CGFloat = DT.widgetWidth
